@@ -1,0 +1,61 @@
+{
+    "name": "derafu/csrf",
+    "description": "Derafu: Csrf - CSRF tokens for the forms, over the session of Mezzio",
+    "type": "library",
+    "homepage": "https://www.derafu.dev/docs/core/csrf",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Esteban De La Fuente Rubio / Derafu",
+            "homepage": "https://www.derafu.dev"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/derafu/csrf/issues",
+        "source": "https://github.com/derafu/csrf"
+    },
+    "autoload": {
+        "psr-4": {
+            "Derafu\\Csrf\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Derafu\\TestsCsrf\\": "tests/src/"
+        }
+    },
+    "require": {
+        "php": "^8.5",
+        "derafu/translation": "dev-main",
+        "derafu/form": "dev-main",
+        "mezzio/mezzio-session": "^1.17",
+        "psr/http-message": "^2.0",
+        "psr/http-server-middleware": "^1.0",
+        "psr/http-server-handler": "^1.0"
+    },
+    "require-dev": {
+        "ext-xdebug": "*",
+        "friendsofphp/php-cs-fixer": "^3.95",
+        "phpstan/phpstan": "^2.3",
+        "phpunit/phpunit": "^13.4",
+        "nikic/php-parser": "^5.9",
+        "laminas/laminas-diactoros": "^3.8",
+        "symfony/dependency-injection": "^8.1",
+        "symfony/config": "^8.1",
+        "symfony/yaml": "^8.1",
+        "derafu/data-processor": "dev-main"
+    },
+    "scripts": {
+        "docs": "php tools/phpdocumentor run --config=phpdoc.xml",
+        "tests": "XDEBUG_MODE=coverage vendor/bin/phpunit --configuration=phpunit.xml",
+        "phpcs-fix": "vendor/bin/php-cs-fixer fix -v --config=php-cs-fixer.php",
+        "phpcs": "vendor/bin/php-cs-fixer fix -v --dry-run --diff --config=php-cs-fixer.php",
+        "phpstan": "vendor/bin/phpstan analyse --configuration=phpstan.neon --memory-limit=1G",
+        "phpstan-export": "vendor/bin/phpstan analyse --configuration=phpstan.neon --level 9 --generate-baseline"
+    },
+    "suggest": {
+        "nikic/php-parser": "Required by the tests of the messages of the package (Derafu\\Translation\\Lint reads the code)."
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}

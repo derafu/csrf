@@ -1,0 +1,31 @@
+# Optional wiring for apps using symfony/dependency-injection.
+# Import it from your own services.yaml:
+#
+#   imports:
+#       - { resource: '../vendor/derafu/csrf/resources/config/csrf-services.yaml' }
+
+services:
+
+    _defaults:
+        autowire: true
+        autoconfigure: true
+        public: false
+
+    # Feeds resources/translations into the consuming app's Translator (the
+    # app must pass $resourceProviders: !tagged_iterator
+    # derafu_translation.resource_provider to TranslatorFactory::create(),
+    # see derafu/translation's translation-services.yaml). The tag is
+    # explicit because _instanceof does not propagate across imported files.
+    Derafu\Csrf\Translation\CsrfTranslationResourceProvider:
+        tags: ['derafu_translation.resource_provider']
+
+    # The CSRF token manager of the forms (derafu/form uses it if there is one)
+    # over the session of Mezzio. It has the session of the request only while
+    # the request is handled: add CsrfSessionMiddleware to the pipeline, after
+    # the session middleware.
+    Derafu\Csrf\SessionCsrfTokenManager: ~
+
+    Derafu\Form\Contract\Csrf\CsrfTokenManagerInterface:
+        alias: Derafu\Csrf\SessionCsrfTokenManager
+
+    Derafu\Csrf\CsrfSessionMiddleware: ~
