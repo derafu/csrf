@@ -2,7 +2,7 @@
     "name": "derafu/csrf",
     "description": "Derafu: Csrf - CSRF tokens for the forms, over the session of Mezzio",
     "type": "library",
-    "homepage": "https://www.derafu.dev/docs/core/csrf",
+    "homepage": "https://www.derafu.dev/docs/ui/csrf",
     "license": "MIT",
     "authors": [
         {
