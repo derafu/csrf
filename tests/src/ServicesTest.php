@@ -67,6 +67,7 @@ final class ServicesTest extends TestCase
     {
         $container = $this->container();
         $manager = $container->get(CsrfTokenManagerInterface::class);
+        $this->assertInstanceOf(CsrfTokenManagerInterface::class, $manager);
         $middleware = $container->get(CsrfSessionMiddleware::class);
         $this->assertInstanceOf(CsrfSessionMiddleware::class, $middleware);
 

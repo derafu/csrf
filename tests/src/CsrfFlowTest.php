@@ -79,6 +79,9 @@ final class CsrfFlowTest extends TestCase
     private function handle(ServerRequestInterface $request, callable $callback): ResponseInterface
     {
         $last = new class ($callback) implements RequestHandlerInterface {
+            /**
+             * @param callable(): void $callback
+             */
             public function __construct(private readonly mixed $callback)
             {
             }
@@ -197,6 +200,7 @@ final class CsrfFlowTest extends TestCase
     {
         $ana = $this->show();
         $eve = $this->show();
+        $this->assertIsString($ana['token']);
 
         $result = $this->send($eve['sid'], ['email' => 'eve@example.com', '_token' => $ana['token']]);
 
@@ -207,6 +211,8 @@ final class CsrfFlowTest extends TestCase
     public function aFormSentWithoutSessionIsNotValidWhateverTheToken(): void
     {
         $shown = $this->show();
+
+        $this->assertIsString($shown['token']);
 
         $result = $this->send(null, ['email' => 'ana@example.com', '_token' => $shown['token']]);
 
@@ -219,6 +225,8 @@ final class CsrfFlowTest extends TestCase
         $first = $this->show();
         $second = $this->show($first['sid']);
 
+        $this->assertIsString($first['token']);
+        $this->assertIsString($second['token']);
         $this->assertNotSame($first['token'], $second['token']);
         $this->assertNull($second['sid'], 'A session that did not change must not be set again.');
 

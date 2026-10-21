@@ -48,6 +48,9 @@ final class CsrfSessionMiddlewareTest extends TestCase
     private function handler(callable $callback): RequestHandlerInterface
     {
         return new class ($callback) implements RequestHandlerInterface {
+            /**
+             * @param callable(): void $callback
+             */
             public function __construct(private readonly mixed $callback)
             {
             }

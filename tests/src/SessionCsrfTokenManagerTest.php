@@ -75,7 +75,9 @@ final class SessionCsrfTokenManagerTest extends TestCase
 
         // Another manager, for the same session (another request).
         $this->assertTrue($this->manager($session)->isValid('login', $token));
-        $this->assertCount(1, $session->get(SessionCsrfTokenManager::SESSION_KEY));
+        $secrets = $session->get(SessionCsrfTokenManager::SESSION_KEY);
+        $this->assertIsArray($secrets);
+        $this->assertCount(1, $secrets);
     }
 
     #[Test]
@@ -162,7 +164,10 @@ final class SessionCsrfTokenManagerTest extends TestCase
     {
         $session = new Session([]);
         $token = $this->manager($session)->getToken('login');
-        $secret = $session->get(SessionCsrfTokenManager::SESSION_KEY)['login'];
+        $secrets = $session->get(SessionCsrfTokenManager::SESSION_KEY);
+        $this->assertIsArray($secrets);
+        $secret = $secrets['login'];
+        $this->assertIsString($secret);
 
         $this->assertStringNotContainsString($secret, $token);
         $this->assertMatchesRegularExpression('/^[A-Za-z0-9_-]+$/', $token);
@@ -177,6 +182,59 @@ final class SessionCsrfTokenManagerTest extends TestCase
         $manager = $this->manager(new Session([SessionCsrfTokenManager::SESSION_KEY => ['login' => ['not a string']]]));
         $this->assertFalse($manager->isValid('login', 'anything'));
         $this->assertTrue($manager->isValid('login', $manager->getToken('login')));
+    }
+
+    #[Test]
+    public function anEmptySecretDoesNotValidateAnEmptyTokenOrModifyTheSession(): void
+    {
+        $session = new Session([SessionCsrfTokenManager::SESSION_KEY => ['login' => '']]);
+        $manager = $this->manager($session);
+
+        $this->assertFalse($manager->isValid('login', ''));
+        $this->assertFalse($manager->isValid('login', 'anything'));
+        $this->assertSame(['login' => ''], $session->get(SessionCsrfTokenManager::SESSION_KEY));
+        $this->assertFalse($session->hasChanged());
+    }
+
+    #[Test]
+    public function anEmptySecretIsRegeneratedWithoutInvalidatingOtherForms(): void
+    {
+        $session = new Session([]);
+        $manager = $this->manager($session);
+        $contactToken = $manager->getToken('contact');
+        $secrets = $session->get(SessionCsrfTokenManager::SESSION_KEY);
+        $this->assertIsArray($secrets);
+        $session->set(SessionCsrfTokenManager::SESSION_KEY, $secrets + ['login' => '']);
+
+        $loginToken = $manager->getToken('login');
+        $updated = $session->get(SessionCsrfTokenManager::SESSION_KEY);
+        $this->assertIsArray($updated);
+        $this->assertIsString($updated['login']);
+        $this->assertMatchesRegularExpression('/^[a-f0-9]{64}$/', $updated['login']);
+        $this->assertSame($secrets['contact'], $updated['contact']);
+        $this->assertTrue($manager->isValid('login', $loginToken));
+        $this->assertFalse($manager->isValid('login', ''));
+        $this->assertTrue($manager->isValid('contact', $contactToken));
+
+        $secondToken = $manager->getToken('login');
+        $this->assertNotSame($loginToken, $secondToken);
+        $this->assertTrue($manager->isValid('login', $secondToken));
+        $this->assertTrue($manager->isValid('login', $loginToken));
+        $this->assertSame($updated, $session->get(SessionCsrfTokenManager::SESSION_KEY));
+    }
+
+    #[Test]
+    public function aZeroStringSecretIsNotTreatedAsEmptyOrReplaced(): void
+    {
+        $session = new Session([SessionCsrfTokenManager::SESSION_KEY => ['login' => '0']]);
+        $manager = $this->manager($session);
+
+        $token = $manager->getToken('login');
+
+        $this->assertTrue($manager->isValid('login', $token));
+        $this->assertFalse($manager->isValid('login', ''));
+        $this->assertSame(['login' => '0'], $session->get(SessionCsrfTokenManager::SESSION_KEY));
+        $this->assertFalse($session->hasChanged());
     }
 
     #[Test]

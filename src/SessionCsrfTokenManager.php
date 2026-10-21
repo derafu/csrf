@@ -107,17 +107,21 @@ final class SessionCsrfTokenManager implements CsrfTokenManagerInterface
     /**
      * Gets the secrets of the session, by id.
      *
-     * @return array<string, string>
+     * @return array<string, non-empty-string>
      */
     private function getSecrets(SessionInterface $session): array
     {
         $secrets = $session->get(self::SESSION_KEY);
 
-        return is_array($secrets) ? array_filter($secrets, 'is_string') : [];
+        return is_array($secrets)
+            ? array_filter($secrets, static fn (mixed $secret): bool => is_string($secret) && $secret !== '')
+            : [];
     }
 
     /**
      * Masks a secret: random bytes, followed by the secret combined with them.
+     *
+     * @param non-empty-string $secret
      */
     private function mask(string $secret): string
     {
