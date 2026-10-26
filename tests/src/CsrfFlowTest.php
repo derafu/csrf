@@ -15,6 +15,7 @@ namespace Derafu\TestsCsrf;
 use Derafu\Csrf\CsrfSessionMiddleware;
 use Derafu\Csrf\SessionCsrfTokenManager;
 use Derafu\DataProcessor\ProcessorFactory;
+use Derafu\Form\Contract\FormInterface;
 use Derafu\Form\Contract\Processor\ProcessResultInterface;
 use Derafu\Form\Factory\FormRendererFactory;
 use Derafu\Form\Form;
@@ -128,7 +129,7 @@ final class CsrfFlowTest extends TestCase
             }
         );
 
-        preg_match('/name="_token" value="([^"]+)"/', $html, $matches);
+        preg_match('/name="' . preg_quote(FormInterface::DEFAULT_CSRF_FIELD_NAME, '/') . '" value="([^"]+)"/', $html, $matches);
 
         return [
             'token' => $matches[1] ?? null,
@@ -178,7 +179,7 @@ final class CsrfFlowTest extends TestCase
         $this->assertNotNull($shown['token']);
         $this->assertNotNull($shown['sid'], 'The session was not created.');
 
-        $result = $this->send($shown['sid'], ['email' => 'ana@example.com', '_token' => $shown['token']]);
+        $result = $this->send($shown['sid'], ['email' => 'ana@example.com', FormInterface::CSRF_FIELD => $shown['token']]);
 
         $this->assertTrue($result->isValid());
         $this->assertSame(['email' => 'ana@example.com'], $result->getProcessedData());
@@ -202,7 +203,7 @@ final class CsrfFlowTest extends TestCase
         $eve = $this->show();
         $this->assertIsString($ana['token']);
 
-        $result = $this->send($eve['sid'], ['email' => 'eve@example.com', '_token' => $ana['token']]);
+        $result = $this->send($eve['sid'], ['email' => 'eve@example.com', FormInterface::CSRF_FIELD => $ana['token']]);
 
         $this->assertFalse($result->isValid());
     }
@@ -214,7 +215,7 @@ final class CsrfFlowTest extends TestCase
 
         $this->assertIsString($shown['token']);
 
-        $result = $this->send(null, ['email' => 'ana@example.com', '_token' => $shown['token']]);
+        $result = $this->send(null, ['email' => 'ana@example.com', FormInterface::CSRF_FIELD => $shown['token']]);
 
         $this->assertFalse($result->isValid());
     }
@@ -231,7 +232,7 @@ final class CsrfFlowTest extends TestCase
         $this->assertNull($second['sid'], 'A session that did not change must not be set again.');
 
         foreach ([$first['token'], $second['token']] as $token) {
-            $this->assertTrue($this->send($first['sid'], ['email' => 'ana@example.com', '_token' => $token])->isValid());
+            $this->assertTrue($this->send($first['sid'], ['email' => 'ana@example.com', FormInterface::CSRF_FIELD => $token])->isValid());
         }
     }
 
