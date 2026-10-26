@@ -17,6 +17,8 @@ use Derafu\Csrf\CsrfSessionMiddleware;
 use Derafu\Csrf\SessionCsrfTokenManager;
 use Derafu\Csrf\Translation\CsrfTranslationResourceProvider;
 use Derafu\Form\Contract\Csrf\CsrfTokenManagerInterface;
+use Derafu\Translation\Exception\Core\TranslatableLogicException;
+use Derafu\Translation\TranslatorFactory;
 use Laminas\Diactoros\Response\EmptyResponse;
 use Laminas\Diactoros\ServerRequest;
 use Mezzio\Session\Session;
@@ -28,8 +30,10 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 use Symfony\Component\Config\FileLocator;
+use Symfony\Component\DependencyInjection\Argument\TaggedIteratorArgument;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Loader\YamlFileLoader;
+use Symfony\Component\Translation\Translator;
 
 /**
  * An application that imports the services of the package gets, for the
@@ -99,5 +103,50 @@ final class ServicesTest extends TestCase
         $definition = $this->container(compile: false)->getDefinition(CsrfTranslationResourceProvider::class);
 
         $this->assertArrayHasKey('derafu_translation.resource_provider', $definition->getTags());
+    }
+
+    #[Test]
+    public function everyConfiguredServiceCanBeConstructedAndTheAliasSharesItsManager(): void
+    {
+        $container = $this->container(compile: false);
+        foreach ($container->getDefinitions() as $definition) {
+            $definition->setPublic(true);
+        }
+        $container->compile(true);
+
+        foreach ([SessionCsrfTokenManager::class, CsrfSessionMiddleware::class, CsrfTranslationResourceProvider::class] as $class) {
+            $this->assertInstanceOf($class, $container->get($class));
+        }
+        $this->assertSame($container->get(SessionCsrfTokenManager::class), $container->get(CsrfTokenManagerInterface::class));
+        $resources = $container->get(CsrfTranslationResourceProvider::class);
+        $this->assertInstanceOf(CsrfTranslationResourceProvider::class, $resources);
+        $directories = [...$resources->getDirectories()];
+        $this->assertCount(1, $directories);
+        $this->assertSame(realpath(dirname(__DIR__, 2) . '/resources/translations'), realpath($directories[0]));
+    }
+
+    #[Test]
+    public function theConsumerTranslatesARealManagerExceptionUsingTaggedResources(): void
+    {
+        $container = $this->container(compile: false);
+        $container->register('app.translator', Translator::class)
+            ->setFactory([TranslatorFactory::class, 'create'])
+            ->setArguments(['es', ['en'], new TaggedIteratorArgument('derafu_translation.resource_provider')])
+            ->setPublic(true);
+        $container->compile(true);
+        $translator = $container->get('app.translator');
+        $this->assertInstanceOf(Translator::class, $translator);
+        $manager = $container->get(CsrfTokenManagerInterface::class);
+        $this->assertInstanceOf(CsrfTokenManagerInterface::class, $manager);
+
+        try {
+            $manager->getToken('contact');
+            $this->fail('The manager generated a token without a session.');
+        } catch (TranslatableLogicException $exception) {
+            $this->assertSame(
+                'No hay una sesión para los tokens CSRF. Agrega CsrfSessionMiddleware al pipeline, después del middleware de la sesión.',
+                $exception->trans($translator)
+            );
+        }
     }
 }
