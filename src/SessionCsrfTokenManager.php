@@ -12,7 +12,7 @@ declare(strict_types=1);
 
 namespace Derafu\Csrf;
 
-use Derafu\Form\Contract\Csrf\CsrfTokenManagerInterface;
+use Derafu\Csrf\Contract\SessionCsrfTokenManagerInterface;
 use Derafu\Translation\Exception\Core\TranslatableLogicException as LogicException;
 use Mezzio\Session\SessionInterface;
 
@@ -34,7 +34,7 @@ use Mezzio\Session\SessionInterface;
  * container, so the session is given to it for the time of the request by
  * `CsrfSessionMiddleware`. Without it, the manager can not be used.
  */
-final class SessionCsrfTokenManager implements CsrfTokenManagerInterface
+final class SessionCsrfTokenManager implements SessionCsrfTokenManagerInterface
 {
     /**
      * Where the secrets are in the session: an array from the id to its secret.

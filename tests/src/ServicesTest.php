@@ -13,27 +13,31 @@ declare(strict_types=1);
 namespace Derafu\TestsCsrf;
 
 use ArrayObject;
+use Derafu\Csrf\Contract\SessionCsrfTokenManagerInterface;
 use Derafu\Csrf\CsrfSessionMiddleware;
 use Derafu\Csrf\SessionCsrfTokenManager;
 use Derafu\Csrf\Translation\CsrfTranslationResourceProvider;
 use Derafu\Form\Contract\Csrf\CsrfTokenManagerInterface;
 use Derafu\Translation\Exception\Core\TranslatableLogicException;
-use Derafu\Translation\TranslatorFactory;
 use Laminas\Diactoros\Response\EmptyResponse;
 use Laminas\Diactoros\ServerRequest;
 use Mezzio\Session\Session;
 use Mezzio\Session\SessionMiddleware;
 use PHPUnit\Framework\Attributes\CoversNothing;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\RequestHandlerInterface;
+use RuntimeException;
 use Symfony\Component\Config\FileLocator;
-use Symfony\Component\DependencyInjection\Argument\TaggedIteratorArgument;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\DependencyInjection\ContainerInterface;
+use Symfony\Component\DependencyInjection\Dumper\PhpDumper;
 use Symfony\Component\DependencyInjection\Loader\YamlFileLoader;
 use Symfony\Component\Translation\Translator;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 /**
  * An application that imports the services of the package gets, for the
@@ -43,13 +47,17 @@ use Symfony\Component\Translation\Translator;
 #[CoversNothing]
 final class ServicesTest extends TestCase
 {
-    private function container(bool $compile = true): ContainerBuilder
+    private function container(bool $compile = true, string $configuration = 'csrf-services.yaml'): ContainerBuilder
     {
         $container = new ContainerBuilder();
-        (new YamlFileLoader($container, new FileLocator(dirname(__DIR__, 2) . '/resources/config')))
-            ->load('csrf-services.yaml');
+        (new YamlFileLoader($container, new FileLocator([
+            dirname(__DIR__, 2) . '/resources/config',
+            dirname(__DIR__) . '/fixtures/config',
+        ])))
+            ->load($configuration);
 
         $container->getAlias(CsrfTokenManagerInterface::class)->setPublic(true);
+        $container->getDefinition(SessionCsrfTokenManagerInterface::class)->setPublic(true);
         $container->getDefinition(CsrfSessionMiddleware::class)->setPublic(true);
         if ($compile) {
             $container->compile(true);
@@ -114,10 +122,14 @@ final class ServicesTest extends TestCase
         }
         $container->compile(true);
 
-        foreach ([SessionCsrfTokenManager::class, CsrfSessionMiddleware::class, CsrfTranslationResourceProvider::class] as $class) {
-            $this->assertInstanceOf($class, $container->get($class));
+        foreach ([
+            SessionCsrfTokenManagerInterface::class => SessionCsrfTokenManager::class,
+            CsrfSessionMiddleware::class => CsrfSessionMiddleware::class,
+            CsrfTranslationResourceProvider::class => CsrfTranslationResourceProvider::class,
+        ] as $id => $class) {
+            $this->assertInstanceOf($class, $container->get($id));
         }
-        $this->assertSame($container->get(SessionCsrfTokenManager::class), $container->get(CsrfTokenManagerInterface::class));
+        $this->assertSame($container->get(SessionCsrfTokenManagerInterface::class), $container->get(CsrfTokenManagerInterface::class));
         $resources = $container->get(CsrfTranslationResourceProvider::class);
         $this->assertInstanceOf(CsrfTranslationResourceProvider::class, $resources);
         $directories = [...$resources->getDirectories()];
@@ -128,13 +140,9 @@ final class ServicesTest extends TestCase
     #[Test]
     public function theConsumerTranslatesARealManagerExceptionUsingTaggedResources(): void
     {
-        $container = $this->container(compile: false);
-        $container->register('app.translator', Translator::class)
-            ->setFactory([TranslatorFactory::class, 'create'])
-            ->setArguments(['es', ['en'], new TaggedIteratorArgument('derafu_translation.resource_provider')])
-            ->setPublic(true);
+        $container = $this->container(compile: false, configuration: 'translation.yaml');
         $container->compile(true);
-        $translator = $container->get('app.translator');
+        $translator = $container->get(TranslatorInterface::class);
         $this->assertInstanceOf(Translator::class, $translator);
         $manager = $container->get(CsrfTokenManagerInterface::class);
         $this->assertInstanceOf(CsrfTokenManagerInterface::class, $manager);
@@ -148,5 +156,73 @@ final class ServicesTest extends TestCase
                 $exception->trans($translator)
             );
         }
+    }
+
+    /**
+     * @return array<string,array{bool}>
+     */
+    public static function handlerOutcomes(): array
+    {
+        return [
+            'normal response' => [false],
+            'handler exception' => [true],
+        ];
+    }
+
+    #[DataProvider('handlerOutcomes')]
+    public function testCompiledMiddlewareSharesTheManagerAndReleasesItsSession(bool $throws): void
+    {
+        $container = $this->container();
+        $class = 'CsrfSessionContractContainer';
+        $code = '';
+        if (!class_exists($class, false)) {
+            $dump = (new PhpDumper($container))->dump(['class' => $class]);
+            self::assertIsString($dump);
+            $code = substr($dump, 5);
+        }
+        $compiled = eval($code . "\nreturn new " . $class . '();');
+        self::assertInstanceOf(ContainerInterface::class, $compiled);
+        $manager = $compiled->get(CsrfTokenManagerInterface::class);
+        self::assertInstanceOf(CsrfTokenManagerInterface::class, $manager);
+        self::assertSame($manager, $compiled->get(SessionCsrfTokenManagerInterface::class));
+        $middleware = $compiled->get(CsrfSessionMiddleware::class);
+        self::assertInstanceOf(CsrfSessionMiddleware::class, $middleware);
+
+        /** @var ArrayObject<string,bool> $seen */
+        $seen = new ArrayObject(['valid' => false]);
+        $request = (new ServerRequest())->withAttribute(SessionMiddleware::SESSION_ATTRIBUTE, new Session([]));
+        $handler = new class ($manager, $seen, $throws) implements RequestHandlerInterface {
+            /**
+             * @param ArrayObject<string,bool> $seen
+             */
+            public function __construct(
+                private readonly CsrfTokenManagerInterface $manager,
+                private readonly ArrayObject $seen,
+                private readonly bool $throws
+            ) {
+            }
+
+            public function handle(ServerRequestInterface $request): ResponseInterface
+            {
+                $this->seen['valid'] = $this->manager->isValid('contact', $this->manager->getToken('contact'));
+                if ($this->throws) {
+                    throw new RuntimeException('Handler failed.');
+                }
+
+                return new EmptyResponse();
+            }
+        };
+
+        try {
+            $response = $middleware->process($request, $handler);
+            self::assertFalse($throws, 'The handler exception was not propagated.');
+            self::assertSame(204, $response->getStatusCode());
+        } catch (RuntimeException $exception) {
+            self::assertTrue($throws);
+            self::assertSame('Handler failed.', $exception->getMessage());
+        }
+        self::assertTrue($seen['valid']);
+        $this->expectException(TranslatableLogicException::class);
+        $manager->getToken('contact');
     }
 }

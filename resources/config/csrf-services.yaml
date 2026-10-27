@@ -23,9 +23,13 @@ services:
     # over the session of Mezzio. It has the session of the request only while
     # the request is handled: add CsrfSessionMiddleware to the pipeline, after
     # the session middleware.
-    Derafu\Csrf\SessionCsrfTokenManager: ~
+    Derafu\Csrf\Contract\SessionCsrfTokenManagerInterface:
+        class: Derafu\Csrf\SessionCsrfTokenManager
 
     Derafu\Form\Contract\Csrf\CsrfTokenManagerInterface:
-        alias: Derafu\Csrf\SessionCsrfTokenManager
+        alias: Derafu\Csrf\Contract\SessionCsrfTokenManagerInterface
 
-    Derafu\Csrf\CsrfSessionMiddleware: ~
+    # A distinct member of the PSR-15 middleware pipeline.
+    Derafu\Csrf\CsrfSessionMiddleware:
+        arguments:
+            $manager: '@Derafu\Csrf\Contract\SessionCsrfTokenManagerInterface'

@@ -1,0 +1,13 @@
+imports:
+    - { resource: '../../../vendor/derafu/data-processor/resources/config/data-processor-services.yaml' }
+    - { resource: '../../../vendor/derafu/form/resources/config/form-services.yaml' }
+    - { resource: '../../../resources/config/csrf-services.yaml' }
+
+parameters:
+    derafu.twig.options: { extra: false }
+
+services:
+    Symfony\Contracts\Translation\TranslatorInterface:
+        class: Symfony\Component\Translation\Translator
+        arguments:
+            $locale: en

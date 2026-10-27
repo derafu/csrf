@@ -12,15 +12,15 @@ declare(strict_types=1);
 
 namespace Derafu\TestsCsrf;
 
+use Composer\InstalledVersions;
+use Derafu\Csrf\Contract\SessionCsrfTokenManagerInterface;
 use Derafu\Csrf\CsrfSessionMiddleware;
 use Derafu\Csrf\SessionCsrfTokenManager;
-use Derafu\DataProcessor\ProcessorFactory;
 use Derafu\Form\Contract\FormInterface;
+use Derafu\Form\Contract\Processor\FormDataProcessorInterface;
 use Derafu\Form\Contract\Processor\ProcessResultInterface;
-use Derafu\Form\Factory\FormRendererFactory;
+use Derafu\Form\Contract\Renderer\FormRendererInterface;
 use Derafu\Form\Form;
-use Derafu\Form\Processor\FormDataProcessor;
-use Derafu\Form\Processor\FormRulesResolver;
 use Derafu\TestsCsrf\Fixture\InMemorySessionPersistence;
 use Laminas\Diactoros\Response\EmptyResponse;
 use Laminas\Diactoros\ServerRequest;
@@ -31,6 +31,10 @@ use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\RequestHandlerInterface;
+use RuntimeException;
+use Symfony\Component\Config\FileLocator;
+use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\DependencyInjection\Loader\YamlFileLoader;
 
 /**
  * The manager with what it works with: the session middleware of Mezzio, the
@@ -46,12 +50,22 @@ final class CsrfFlowTest extends TestCase
 {
     private InMemorySessionPersistence $persistence;
 
-    private SessionCsrfTokenManager $manager;
+    private ContainerBuilder $container;
 
     protected function setUp(): void
     {
         $this->persistence = new InMemorySessionPersistence();
-        $this->manager = new SessionCsrfTokenManager();
+        $this->container = new ContainerBuilder();
+        $this->container->setParameter('kernel.project_dir', dirname(__DIR__, 2));
+        (new YamlFileLoader($this->container, new FileLocator([
+            dirname(__DIR__) . '/fixtures/config',
+            (InstalledVersions::getInstallPath('derafu/renderer')
+                ?? throw new RuntimeException('derafu/renderer must be installed for these tests.')) . '/resources/config',
+        ])))->load('flow.yaml');
+        foreach ([SessionCsrfTokenManagerInterface::class, CsrfSessionMiddleware::class, FormRendererInterface::class, FormDataProcessorInterface::class] as $id) {
+            $this->container->getDefinition($id)->setPublic(true);
+        }
+        $this->container->compile();
     }
 
     /**
@@ -95,7 +109,8 @@ final class CsrfFlowTest extends TestCase
             }
         };
 
-        $csrf = new CsrfSessionMiddleware($this->manager);
+        $csrf = $this->container->get(CsrfSessionMiddleware::class);
+        self::assertInstanceOf(CsrfSessionMiddleware::class, $csrf);
         $middle = new class ($csrf, $last) implements RequestHandlerInterface {
             public function __construct(
                 private readonly CsrfSessionMiddleware $csrf,
@@ -119,7 +134,8 @@ final class CsrfFlowTest extends TestCase
      */
     private function show(?string $sid = null, bool $protected = true): array
     {
-        $renderer = FormRendererFactory::create(['csrf_token_manager' => $this->manager]);
+        $renderer = $this->container->get(FormRendererInterface::class);
+        self::assertInstanceOf(FormRendererInterface::class, $renderer);
         $html = '';
 
         $response = $this->handle(
@@ -144,15 +160,11 @@ final class CsrfFlowTest extends TestCase
      */
     private function send(?string $sid, array $body): ProcessResultInterface
     {
-        $manager = $this->manager;
         $result = null;
 
-        $this->handle($this->request($sid, $body), function () use ($manager, $body, &$result): void {
-            $processor = new FormDataProcessor(
-                new FormRulesResolver(),
-                (new ProcessorFactory())->create(),
-                csrfTokenManager: $manager
-            );
+        $this->handle($this->request($sid, $body), function () use ($body, &$result): void {
+            $processor = $this->container->get(FormDataProcessorInterface::class);
+            self::assertInstanceOf(FormDataProcessorInterface::class, $processor);
             $result = $processor->process($this->form(), $body);
         });
 

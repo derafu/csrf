@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace Derafu\Csrf;
 
+use Derafu\Csrf\Contract\SessionCsrfTokenManagerInterface;
 use Mezzio\Session\SessionInterface;
 use Mezzio\Session\SessionMiddleware;
 use Psr\Http\Message\ResponseInterface;
@@ -29,7 +30,7 @@ use Psr\Http\Server\RequestHandlerInterface;
  */
 final class CsrfSessionMiddleware implements MiddlewareInterface
 {
-    public function __construct(private readonly SessionCsrfTokenManager $manager)
+    public function __construct(private readonly SessionCsrfTokenManagerInterface $manager)
     {
     }
 
