@@ -18,6 +18,7 @@ use Mezzio\Session\Session;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\Attributes\TestWith;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -42,6 +43,29 @@ final class SessionCsrfTokenManagerTest extends TestCase
         $manager = $this->manager();
 
         $this->assertTrue($manager->isValid('login', $manager->getToken('login')));
+    }
+
+    #[Test]
+    #[TestWith(['0'])]
+    #[TestWith(['123'])]
+    #[TestWith(['00123'])]
+    public function numericIdsReuseTheirSecretAcrossManagersForTheSameSession(string $id): void
+    {
+        $session = new Session([]);
+        $first = $this->manager($session)->getToken($id);
+        $secrets = $session->get(SessionCsrfTokenManager::SESSION_KEY);
+        $this->assertIsArray($secrets);
+        $this->assertArrayHasKey($id, $secrets);
+        $this->assertCount(1, $secrets);
+
+        $manager = $this->manager($session);
+        $second = $manager->getToken($id);
+
+        $this->assertSame($secrets, $session->get(SessionCsrfTokenManager::SESSION_KEY));
+        $this->assertNotSame($first, $second);
+        $this->assertTrue($manager->isValid($id, $first));
+        $this->assertTrue($manager->isValid($id, $second));
+        $this->assertFalse($manager->isValid('other-form', $first));
     }
 
     #[Test]

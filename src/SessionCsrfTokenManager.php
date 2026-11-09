@@ -107,7 +107,7 @@ final class SessionCsrfTokenManager implements SessionCsrfTokenManagerInterface
     /**
      * Gets the secrets of the session, by id.
      *
-     * @return array<string, non-empty-string>
+     * @return array<array-key, non-empty-string>
      */
     private function getSecrets(SessionInterface $session): array
     {

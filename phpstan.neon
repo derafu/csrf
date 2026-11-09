@@ -1,6 +1,6 @@
 parameters:
-    # Review level, from basic (1) to very thorough (9).
-    level: 9
+    # Review level, from basic (1) to very thorough (10).
+    level: 10
     # Source code directories to be reviewed.
     paths:
         - src

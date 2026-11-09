@@ -15,6 +15,7 @@ namespace Derafu\TestsCsrf\Fixture;
 use Mezzio\Session\Session;
 use Mezzio\Session\SessionInterface;
 use Mezzio\Session\SessionPersistenceInterface;
+use PHPUnit\Framework\Assert;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 
@@ -31,17 +32,30 @@ final class InMemorySessionPersistence implements SessionPersistenceInterface
     /**
      * The data of the sessions, by identifier.
      *
-     * @var array<string, array<string, mixed>>
+     * @var array<string, array<array-key, mixed>>
      */
     public array $store = [];
 
+    /**
+     * {@inheritDoc}
+     */
     public function initializeSessionFromRequest(ServerRequestInterface $request): SessionInterface
     {
-        $id = (string) ($request->getCookieParams()['sid'] ?? '');
+        $id = $request->getCookieParams()['sid'] ?? '';
+        Assert::assertIsString($id);
 
-        return new Session($id !== '' ? ($this->store[$id] ?? []) : [], $id);
+        $data = [];
+        foreach ($id !== '' ? ($this->store[$id] ?? []) : [] as $key => $value) {
+            Assert::assertIsString($key);
+            $data[$key] = $value;
+        }
+
+        return new Session($data, $id);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function persistSession(SessionInterface $session, ResponseInterface $response): ResponseInterface
     {
         $id = $session->getId();
